@@ -1560,3 +1560,64 @@ artık **pasif kart kalmadığı için** sonda atacak zemin yok. Canlıya
 pasif kart açmak "ölçüm için canlıya yazmak" olurdu; yapılmadı.
 Mehmet Bey ilk kartı arşivlediğinde, tıpkı END0010 gibi, bedava
 ölçülecek.
+
+---
+
+## ⚠ VEKİL/1 KAPANMAMIŞ — BAŞLIK ULAŞIYOR, TÜKETİCİLER OKUMUYOR (2026-09-17)
+
+### Sonda ne yaptı
+
+Kimlik gerektirmeyen, iş verisine dokunmayan, **denetlenen bir
+giriş-dışı yazma**: iki farklı sahte adresten geçersiz portal jetonu
+denendi (`/api/backend/portal/...` → `[...path]` vekili →
+`PortalTokenRejected` denetim satırı).
+
+```
+XFF=203.0.113.77  -> 404, denetim satırı: 127.0.0.1
+XFF=198.51.100.88 -> 404, denetim satırı: 127.0.0.1
+```
+
+**KIRMIZI.** Oysa aynı vekilden geçen GİRİŞ sondası (15.09) gerçek
+adresleri yazmıştı.
+
+### Sebep — ve VEKİL/1'in eksik kalan yarısı
+
+`PortalController.cs:215` doğrudan
+`HttpContext.Connection.RemoteIpAddress` okuyor; `X-Forwarded-For`a
+**hiç bakmıyor**.
+
+Kapsam ölçüldü:
+
+| okuma biçimi | kaç yer |
+|---|---|
+| `X-Forwarded-For`a bakan | **1 dosya** (`AuthController`) |
+| `RemoteIpAddress`i doğrudan okuyan | **11 yer** |
+
+Ve o 11'in içinde **`AuditSaveChangesInterceptor.cs:135`** var — yani
+**her `Created`/`Updated` denetim satırını damgalayan izleyici.**
+
+> **VEKİL/1'in ön yüz düzeltmesi GEREKLİYDİ AMA YETERLİ DEĞİLDİ.**
+> Başlık artık arka uca ulaşıyor (kanıtlı); ama **başlığı okumak ayrı
+> bir iştir** ve tüketicilerin 10'u okumuyor.
+
+### KENDİ HATAM — banner'ı fazla genişletmiştim
+
+16 Eylül'de uyarıyı daraltırken *"22:48'den sonraki satırların IP'si
+gerçektir"* yazmıştım. **Yanlıştı** — yalnız GİRİŞ satırları için
+doğruydu. Kullanıcıya güvenilmez bir alanı güvenilir diye gösteriyordu.
+
+Banner yeniden yazıldı: *"IP alanı YALNIZ giriş olaylarında
+güvenilirdir."*
+
+Ve bir test kusuru daha çıktı: o banner'ı koruyan test `"22:48"`
+dizgesini arıyordu; dizge banner'dan çıkıp **eski yanlış iddiayı
+alıntılayan yoruma** taşınınca test **yanlış sebeple yeşil kaldı**.
+Test, banner'ın KENDİ İDDİASINI ölçecek biçimde yeniden yazıldı
+(yorumlar ayıklanarak) ve mutasyonla sınandı.
+
+### YAPILMADI — karar bekliyor
+
+Doğru düzeltme: `AuthController.ResolveClientIp()` mantığının **ortak
+bir çözücüye** çıkarılması ve 11 okuma noktasının ona bağlanması.
+Bu, tek satırlık bir iş değil — 11 çağrı yeri ve her birinin kendi
+bağlamı var. Kendi başıma girmedim.

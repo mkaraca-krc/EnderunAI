@@ -222,26 +222,34 @@ export default function SecurityAuditPage() {
         )}
 
         {/*
-          * UYARI ÖLÇÜMLE DEĞİŞTİ (2026-09-16, Kural 94).
+          * UYARI İKİNCİ KEZ DÜZELTİLDİ (2026-09-17, Kural 94).
           *
-          * Burada "IP alanı şu an güvenilmez" yazıyordu. VEKİL/1
-          * düzeltmesi 2026-09-15 22:48 UTC'de yayınlandı ve aynı aletle
-          * doğrulandı: iki farklı adresten iki istek, kayda İKİ FARKLI
-          * IP düştü (önce ikisi de 127.0.0.1'di).
+          * 16 Eylül'de bu uyarıyı daralttım ve "22:48'den SONRAKİ
+          * satırların IP'si gerçektir" yazdım. ÖLÇÜM BUNU ÇÜRÜTTÜ.
           *
-          * Ama uyarı KALDIRILMADI, DARALTILDI: düzeltmeden ÖNCEKİ
-          * satırlar hâlâ 127.0.0.1 taşıyor ve asıl yanıltıcı olan onlar.
-          * "Alan güvenilir" demek, o satırları da güvenilir göstermek
-          * olurdu.
+          * Vekil düzeltmesi (VEKİL/1) başlığı arka uca İLETİYOR —
+          * kanıtlı. Ama başlığı OKUMAK ayrı bir iş ve arka uçta
+          * `X-Forwarded-For`a bakan TEK dosya var: AuthController.
+          * `RemoteIpAddress`i doğrudan okuyan 11 yer var ve bunların
+          * biri `AuditSaveChangesInterceptor` — yani HER Created/Updated
+          * satırını damgalayan izleyici.
+          *
+          * Sonda (17.09): iki farklı adresten geçersiz portal jetonu
+          * denendi; iki denetim satırı da 127.0.0.1 yazdı.
+          *
+          * Yani düzeltme GİRİŞ satırlarını düzeltti, ötekileri değil.
           */}
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <strong>15.09.2026 22:48&apos;den ÖNCEKİ satırlarda IP alanı
-          güvenilmez.</strong> O tarihe kadar uygulama proxy&apos;si
-          istemci adresini backend&apos;e iletmiyordu; giriş dışındaki
-          işlemler <code>127.0.0.1</code> olarak kaydedildi. Düzeltme
-          yayınlandı ve ölçümle doğrulandı — <strong>o tarihten sonraki
-          satırların IP&apos;si gerçektir.</strong> Eski satırlar
-          silinmedi; IP&apos;ye dayanarak sonuç çıkarırken tarihe bakın.
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <strong>IP alanı YALNIZ giriş olaylarında güvenilirdir.</strong>{" "}
+          Giriş dışındaki işlemlerde (kayıt oluşturma/güncelleme, portal,
+          mesai) uygulama istemci adresini okumuyor ve{" "}
+          <code>127.0.0.1</code> yazıyor. Vekil adresi arka uca iletiyor,
+          ama arka uçtaki 11 okuma noktasının 10&apos;u
+          <code>X-Forwarded-For</code> yerine bağlantı adresine bakıyor.
+          <br />
+          <strong>17.09.2026&apos;da ölçüldü</strong> ve düzeltilmedi —
+          bu alana dayanarak giriş dışı bir işlemin nereden yapıldığı
+          sonucuna VARMAYIN.
         </div>
 
         {/*

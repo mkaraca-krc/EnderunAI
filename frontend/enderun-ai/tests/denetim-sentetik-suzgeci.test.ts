@@ -63,8 +63,25 @@ describe("ekran muhafızı", () => {
     expect(sayfa).toContain("rows={gorunenSatirlar}");
   });
 
-  it("IP uyarısı ölçümle daraltılmış — tarih taşıyor", () => {
-    expect(sayfa).toContain("22:48");
-    expect(sayfa).not.toMatch(/IP adresi alanı şu an güvenilmez/);
+  /*
+   * TEST YANLIŞ SEBEPLE GEÇİYORDU (2026-09-17 düzeltmesi).
+   *
+   * Eski hâli `"22:48"` dizgesini arıyordu. Uyarı 17 Eylül'de yeniden
+   * yazılınca o dizge banner'dan çıktı — ama YORUMDA, eski yanlış
+   * iddiayı alıntılarken kaldı. Test yeşil yanmaya devam etti ve
+   * artık banner hakkında HİÇBİR ŞEY ölçmüyordu.
+   *
+   * Yanlış sebeple geçen test, testsizlikten kötüdür: yeşil olduğu
+   * için kimse bakmaz. Şimdi BANNER'IN KENDİ İDDİASI ölçülüyor.
+   */
+  it("IP uyarısı bugünkü ÖLÇÜMÜ söylüyor — giriş dışı güvenilmez", () => {
+    // Banner'ın gövdesi (yorumlar hariç) sınanıyor.
+    const govde = sayfa.replace(/\{\/\*[\s\S]*?\*\/\}/g, "");
+
+    expect(govde).toMatch(/YALNIZ giriş olaylarında güvenilirdir/);
+    expect(govde).toContain("127.0.0.1");
+    // Eski, çürütülmüş iddia banner'a geri dönmemiş olmalı:
+    expect(govde).not.toMatch(/sonraki satırların IP.si gerçektir/);
+    expect(govde).not.toMatch(/IP adresi alanı şu an güvenilmez/);
   });
 });
