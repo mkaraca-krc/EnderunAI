@@ -103,3 +103,50 @@ koşturulacak.
 1. Plan onaylanır.
 2. Kod + göç yazılır, `goc-provasi.sh` koşar.
 3. Dağıtım **19:00 sonrası**, ve **A (K5) önce iner**.
+
+---
+
+# EK GÖÇ PLANI — STOPAJ HESABI (2026-09-17)
+
+**Durum: PLAN. Kod yazılmadı.** Mehmet Bey'in kararı (c): adlandırılmış
+hesap alanı.
+
+## Neden şema değişikliği
+
+`TaxPayableAccountId` bir **veritabanı kolonudur**
+(`company_finance_settings`), `GetOrCreateFinanceSettingsAsync` içinde
+şirket başına **bir kez** `"360"`dan tohumlanıp saklanıyor. Adlandırılmış
+yeni alan da aynı tabloda bir kolon demek.
+
+## Değişiklik
+
+```
+ALTER TABLE company_finance_settings
+  ADD COLUMN "IncomeTaxWithholdingAccountId" uuid NULL;
+```
+
+- Tohumlama: `FindAccountIdAsync(companyId, "193")`
+- `AccountingIntegrationService:1006` bu alanı kullanır
+- `FindAccountIdAsync(companyId, "360")` stopaj yolundan **tamamen
+  çıkar** — asıl kusur koda hesap kodu yazılmasıydı
+- **FAIL-CLOSED:** alan boşsa fiş üretilmez, hata verilir
+  (`TaxPayableAccountId`e geri düşüş YOK — o geri düşüş bugünkü kusurun
+  ta kendisi)
+
+`TaxPayableAccountId` **silinmiyor**: bordro yolu onu kullanıyor
+olabilir; yalnız stopaj yolundan çıkıyor.
+
+## Ölçülmüş zemin
+
+| ölçüm | sonuç |
+|---|---|
+| 360'a yazılmış fiş satırı | **0** |
+| stopaj açıklamalı fiş satırı | **0** (hiç stopaj fişi yazılmamış) |
+| stopaj oranı > 0 olan hakediş | **0** (1 hakediş var) |
+
+**Geçmiş kayıt düzeltilmeyecek — düzeltilecek kayıt yok.**
+
+## Geri alınabilirlik
+
+Kolon NULL açılıyor, `DROP COLUMN` ile geri alınır, veri kaybı yok.
+Yıkıcı değil.

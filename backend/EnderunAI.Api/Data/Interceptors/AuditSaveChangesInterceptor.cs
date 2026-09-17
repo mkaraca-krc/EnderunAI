@@ -132,7 +132,24 @@ public sealed class AuditSaveChangesInterceptor(
     private void RecordSecurityAuditEvents(DbContext context, Guid? userId)
     {
         var httpContext = httpContextAccessor.HttpContext;
-        var ipAddress = httpContext?.Connection.RemoteIpAddress?.ToString();
+
+        //
+        // ═══ BAĞLANTI ADRESİ DEĞİL, İSTEMCİ ADRESİ (VEKİL/2, 2026-09-17) ═══
+        //
+        // Burada `Connection.RemoteIpAddress` okunuyordu. Üretim zinciri
+        // istemci → nginx → Next → arka uç olduğu için o adres HER ZAMAN
+        // vekilin kendisiydi: denetim kaydındaki her `Created`/`Updated`
+        // satırı `127.0.0.1` yazıyordu.
+        //
+        // ÖLÇÜLDÜ (17.09): `[...path]` vekilinden geçen iki istek, iki
+        // farklı adresten — iki denetim satırı da 127.0.0.1.
+        //
+        // Çözücü `X-Forwarded-For`a YALNIZ istek bizim vekilimizden
+        // geldiğinde bakar; gelmiyorsa başlığı yok sayar ve sonucu
+        // `(vekilsiz)` diye İŞARETLER. Sessiz geri düşüş yok.
+        //
+        var ipAddress = EnderunAI.Api.Security.Adres.IstemciAdresCozucu
+            .KayitAdresi(httpContext);
         var userAgent = httpContext?.Request.Headers.UserAgent.ToString();
         var username = currentUserService.Username;
 

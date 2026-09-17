@@ -63,6 +63,75 @@ DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
 
 ENV_FILE="/etc/enderunai/backend.env"
 
+# ═══════════════════════════════════════════════════════════════════
+# BELLEK — İKİ TEDBİR (2026-09-17, ölçülerek)
+# ═══════════════════════════════════════════════════════════════════
+#
+# ═══ 1. BU KOŞU ÖNCE ÖLSÜN, ÜRETİM SONRA ═══
+#
+# ÖLÇÜLDÜ (değiştirmeden önce): canlı birimler zaten korunuyor —
+# `enderunai-backend` ve `enderunai-frontend` için
+# `OOMScoreAdjust=-500`, çalışan süreçlerde de `oom_score_adj=-500`
+# (26 Ağustos, üç OOM'dan sonra konmuş).
+#
+# EKSİK OLAN DİĞER YARISIYDI: dağıtım koşusu 0 ile koşuyordu. Çekirdek
+# birini seçmek zorunda kalırsa aday *kim olduğu* değil *skoru* ile
+# belli olur; 0 ile -500 arasındaki fark yeterli değil çünkü derleme
+# 3,8 GB tutarken skoru zaten yükseliyor — ama bunu ŞANSA
+# BIRAKMIYORUZ.
+#
+# Kendi skorumuzu yükseltiyoruz; alt süreçler (dotnet, npm, csc) devralır.
+if [ -w /proc/self/oom_score_adj ]; then
+    _oom_once="$(cat /proc/self/oom_score_adj 2>/dev/null || echo '?')"
+    echo 700 > /proc/self/oom_score_adj 2>/dev/null || true
+    _oom_sonra="$(cat /proc/self/oom_score_adj 2>/dev/null || echo '?')"
+    echo "[safe-deploy] OOM önceliği: ${_oom_once} -> ${_oom_sonra} (üretim -500'de kalıyor)"
+    if [ "$_oom_sonra" != "700" ]; then
+        echo "[safe-deploy] UYARI: oom_score_adj yazılamadı; koşu korumasız." >&2
+    fi
+fi
+
+# ═══ 2. AÇ KARNINA BAŞLAMA ═══
+#
+# ÖLÇÜLEN OLAY: 17 Eylül'de iki test koşusu üst üste SIGTERM (143) aldı.
+# Sebep ölçüldü: `csc.dll` 3,86 GB tutuyordu, kullanılabilir bellek
+# 1,2 GB'a, takas 4 GB'ın 3,9'una inmişti. Takas dolduktan SONRA
+# SIGTERM olarak öğrenmek yerine, BAŞLAMADAN reddediyoruz.
+#
+# EŞİK NASIL SEÇİLDİ (iki uçtan):
+#   · DÜŞEN koşular : kullanılabilir ~1,2 GB
+#   · GEÇEN koşular : kullanılabilir 3.471 MB ve 5.192 MB (ölçüldü)
+# Arada geniş bir boşluk var; eşik ikisinin arasına, düşen tarafa yakın
+# ama ondan belirgin yukarıya kondu.
+#
+# BU EŞİK BİR TAHMİNDİR ve öyle etiketlenmiştir: elde iki geçen, bir
+# düşen koşu var. Daha çok veri geldikçe DÜZELTİLECEK; sayı burada tek
+# yerde durduğu için düzeltmek tek satırlık iş.
+BELLEK_ESIGI_MB="${DAGITIM_BELLEK_ESIGI_MB:-2048}"
+
+bellek_kapisi() {
+    local kullanilabilir
+    kullanilabilir="$(awk '/^MemAvailable:/ {printf "%d", $2/1024}' /proc/meminfo)"
+
+    if [ -z "$kullanilabilir" ]; then
+        log "WARN" "Bellek ÖLÇÜLEMEDİ (/proc/meminfo okunamadı); kapı atlanıyor."
+        return 0
+    fi
+
+    log "INFO" "Bellek kapısı: kullanılabilir ${kullanilabilir} MB (eşik ${BELLEK_ESIGI_MB} MB)."
+
+    if [ "$kullanilabilir" -lt "$BELLEK_ESIGI_MB" ]; then
+        log "ERROR" "DAĞITIM BAŞLAMADI: kullanılabilir bellek ${kullanilabilir} MB, eşik ${BELLEK_ESIGI_MB} MB."
+        log "ERROR" "Aç karnına başlayan dağıtım, derleme tepesinde (3,8 GB ölçüldü) SIGTERM alır."
+        log "ERROR" "Ne yapılır: artık derleyici süreçlerini kapatın —"
+        log "ERROR" "  deploy/scripts/surec-durdur.sh --listele --desen 'Roslyn/bincore'"
+        log "ERROR" "  deploy/scripts/surec-durdur.sh --desen 'Roslyn/bincore'"
+        log "ERROR" "Sonra tekrar deneyin. Eşiği geçmek için: DAGITIM_BELLEK_ESIGI_MB=<n>"
+        return 1
+    fi
+    return 0
+}
+
 # ═══ HOME GÜVENCESİ — systemd-run ALTINDA ÖLÇÜLDÜ (2026-09-15) ═══
 #
 # `systemd-run` geçici birime HOME VERMEZ. HOME yokken `dotnet`in NuGet
@@ -1705,6 +1774,13 @@ main() {
     # İlan yoksa, paket ilanla birebir değilse ya da karar verilemezse
     # (taban yok, paket boş) yayın BURADA durur — pahalı turlardan önce.
     # Sonda: deploy/scripts/test-yayin-kapsami.sh (ucuz kapılarda da koşar).
+    # BELLEK KAPISI — KAPSAM KAPISINDAN HEMEN SONRA, PAHALI TURLARDAN ÖNCE.
+    # Aç karnına başlayan dağıtım derleme tepesinde SIGTERM alır; bunu
+    # 50 dakika sonra öğrenmek yerine burada öğreniyoruz.
+    if ! bellek_kapisi; then
+        fail "Bellek eşiğinin altında; dağıtım başlatılmadı."
+    fi
+
     yayin_kapsami_kapisi
 
     # SİLİNEN SAVUNMA KONTROLÜ — YAYIN ÖNCESİ İKİNCİ AĞ.

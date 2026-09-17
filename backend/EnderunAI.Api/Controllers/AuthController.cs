@@ -501,34 +501,17 @@ public sealed class AuthController(
         });
     }
 
-    private string ResolveClientIp()
-    {
-        //
-        // ═══ İLK DEĞİL SON ELEMAN — ÖLÇÜLEN ATLATMA (2026-09-15) ═══
-        //
-        // `X-Forwarded-For`un İLK elemanı İSTEMCİNİN GÖNDERDİĞİ değerdir;
-        // nginx gerçek adresi `$proxy_add_x_forwarded_for` ile SONA ekler.
-        // İlk elemanı almak, giriş hız sınırını istemcinin kontrolüne
-        // bırakıyordu.
-        //
-        // ÖLÇÜLDÜ: IP kilitliyken (429), uydurma `X-Forwarded-For` ile
-        // aynı uca üç istek → üçü de **401**. Yani kilit atlanıyordu;
-        // saldırgan her istekte başlığı değiştirerek sınırı sonsuza
-        // kadar sıfırlayabilirdi.
-        //
-        // SON eleman vekilin EKLEDİĞİ adrestir; istemci ona dokunamaz.
-        // (Tek vekil var: nginx. Vekil zinciri uzarsa bu seçim gözden
-        // geçirilmeli.)
-        //
-        var forwardedFor = Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (!string.IsNullOrWhiteSpace(forwardedFor))
-        {
-            var parcalar = forwardedFor.Split(',');
-            var sonuncu = parcalar[^1].Trim();
-            if (!string.IsNullOrWhiteSpace(sonuncu))
-                return sonuncu;
-        }
-
-        return HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-    }
+    /// <summary>
+    /// İstemci adresi — ORTAK ÇÖZÜCÜYE DEVREDİLDİ (VEKİL/2, 2026-09-17).
+    ///
+    /// Son-eleman kuralı burada doğmuştu (2026-09-15 ölçümü: ilk elemanı
+    /// almak hız sınırını istemcinin kontrolüne bırakıyordu). Kural
+    /// `IstemciAdresCozucu`ya **taşındı, yeniden yazılmadı** — iki kopya
+    /// zamanla iki davranış demektir.
+    ///
+    /// Çözücü ayrıca bir GÜVEN KAPISI ekliyor: başlığa yalnız istek
+    /// bizim vekilimizden geldiğinde bakılıyor. Burada o kapı yoktu.
+    /// </summary>
+    private string ResolveClientIp() =>
+        EnderunAI.Api.Security.Adres.IstemciAdresCozucu.Coz(HttpContext).Adres;
 }

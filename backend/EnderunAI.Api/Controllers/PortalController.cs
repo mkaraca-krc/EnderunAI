@@ -212,7 +212,13 @@ public sealed class PortalController(
         string token, CancellationToken cancellationToken) =>
         linkResolver.ResolveAsync(
             token,
-            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            // VEKİL/2 (2026-09-17): bağlantı adresi DEĞİL, istemci adresi.
+            // Burada `RemoteIpAddress` okunuyordu ve üretim zincirinde o
+            // her zaman vekilin kendisiydi — `PortalTokenRejected`
+            // satırlarının hepsi 127.0.0.1 yazıyordu (ölçüldü).
+            // Bu uç anonimdir ve kaydı ADLİ değer taşır: geçersiz
+            // bağlantı denemesinin NEREDEN geldiği tam da aranan bilgi.
+            EnderunAI.Api.Security.Adres.IstemciAdresCozucu.KayitAdresi(HttpContext),
             Request.Headers.UserAgent.ToString(),
             cancellationToken);
 

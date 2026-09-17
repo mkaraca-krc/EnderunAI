@@ -1098,3 +1098,80 @@ iner, ya müşavir 191.05'i kabul eder.
 
 **ENGEL KALKTI ama SIRA GELMEDİ.** Açılış girişi **malzeme kartları
 açılmadan başlatılmayacak** (Mehmet Bey, 2026-09-17).
+
+---
+
+## BELLEK — İKİ AYRI MADDE (2026-09-17)
+
+> Bunlar **tek madde değil**. Birleştirilirse ileride biri "derleyici
+> sorunu çözüldü" diye okur ve yanlış yerde arar (Mehmet Bey).
+
+### ③ KALINTI — **KAPANDI, ÖLÇÜLDÜ**
+
+Sorun: `dotnet` arkada bir derleyici sunucusu **bırakıyordu** ve o süreç
+koşular arasında **yaşamaya devam ediyordu**; biri 5,5 GB'a ulaşmıştı.
+
+Ölçüm (her kolda gerçek derleme):
+
+| kol | bayrak | süre | **kalan** süreç |
+|---|---|---|---|
+| A | yok | 268 sn | **1** |
+| B | `UseSharedCompilation=false` | 249 sn | **0** |
+| C | `nodeReuse=false` | 252 sn | **1** |
+| D | ikisi | 270 sn | **0** |
+
+**Çözüm B.** Şu an `deploy/park/`de park; doğru katmandan
+(`derleme-kos.sh` sarmalayıcısı) yeniden yapılacak.
+
+### ⚠ YENİ — **TEPE KULLANIM: AÇIK**
+
+Sorun **başka**: derlemenin **kendi tepe kullanımı**, bayraktan bağımsız.
+
+| ölçüm | değer |
+|---|---|
+| `csc.dll` tek başına | **3,86 GB** |
+| aynı koşuda `csc` + `VBCSCompiler` birlikte | **3,09 + 2,41 = 5,5 GB** |
+| o anda kullanılabilir bellek | **475 MB** |
+| takas | 4 GB'ın **3,9'u dolu** |
+
+**Bayrak bunu çözmüyor.** ③ "kalıntıyı" kaldırıyor, tepe aynı kalıyor —
+hatta paylaşılan sunucu AÇIKKEN iki süreç birden ayakta oluyor.
+
+Bu, 17 Eylül'de iki test koşusunun **SIGTERM (143)** almasının sebebi.
+
+**DENENECEKLER (ölçülerek, hiçbiri yapılmadı):**
+
+1. Paralel derlemeyi kısmak (`-m:1` / `BuildInParallel=false`) — tepe
+   düşer mi, süre ne kadar uzar?
+2. Paylaşılan sunucu kapalıyken bellek davranışı — B kolunda tepe
+   ölçülmedi, yalnız kalıntı ölçüldü. **Ölçüm eksiği bende.**
+3. VSCode sunucusunun koşu sırasında kapatılması — ölçüldü: **750 MB**
+   (`server/node` 499 MB + `csdevkit` 259 MB).
+
+### Bu gece yapılan iki tedbir
+
+**1. OOM önceliği.** Ölçüldü (değiştirmeden önce): canlı birimler
+**zaten korunuyordu** — `OOMScoreAdjust=-500`, hem birimde hem çalışan
+süreçte, 26 Ağustos'tan beri. Eksik olan **diğer yarısıydı**: dağıtım
+koşusu `0` ile koşuyordu. `safe-deploy.sh` artık **kendi skorunu 700'e
+çekiyor** (alt süreçler devralır) ve yazamazsa uyarıyor.
+
+**2. Bellek kapısı.** `safe-deploy.sh` kapsam kapısından hemen sonra,
+pahalı turlardan önce kullanılabilir belleği ölçüyor; eşiğin altındaysa
+**başlamıyor** ve ne yapılacağını söylüyor.
+
+Eşik **2048 MB** seçildi. İki uçtan:
+
+| gözlem | kullanılabilir |
+|---|---|
+| **düşen** koşular | ~1,2 GB |
+| **geçen** dağıtımlar | 3.471 MB ve 5.192 MB |
+
+Arada geniş boşluk var; eşik düşen tarafa yakın ama ondan belirgin
+yukarıya kondu. **Bu bir tahmindir ve öyle etiketlendi** — elde iki
+geçen, bir düşen koşu var. Sayı tek yerde (`BELLEK_ESIGI_MB`), veri
+geldikçe düzeltmek tek satır.
+
+Kapı çağrılarak sınandı: eşik 99999 → **dağıtım başlamaz**; ve şu anki
+gerçek durumda (475 MB) kapı **haklı olarak kırmızı** — bu, kapının
+canlı kanıtı.
